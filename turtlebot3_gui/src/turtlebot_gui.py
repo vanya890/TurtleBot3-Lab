@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                             QGroupBox, QSlider, QFormLayout)
 from PyQt5.QtCore import QTimer, Qt, pyqtSignal, QPointF
 from PyQt5.QtGui import (QFont, QKeyEvent, QPainter, QColor, QPen, QBrush, 
-                         QPolygonF, QTransform)
+                         QPolygonF, QTransform, QImage, QPixmap)
 from geometry_msgs.msg import Twist
 from sensor_msgs.msg import BatteryState, LaserScan
 from nav_msgs.msg import Odometry
@@ -88,6 +88,34 @@ class LidarWidget(QWidget):
                     if i < len(points) - 1:
                         painter.drawLine(points[i], points[i+1])
 
+class CameraWidget(QLabel):
+    def __init__(self, camera_name="Camera", parent=None):
+        super(CameraWidget, self).__init__(parent)
+        self.camera_name = camera_name
+        self.setMinimumSize(320, 240)
+        self.setAlignment(Qt.AlignCenter)
+        self.setText(f"{camera_name}: No Image")
+        self.setStyleSheet("background-color: #f0f0f0; border: 1px solid #cccccc;")
+
+    def update_image(self, msg):
+        try:
+            # Преобразование ROS Image в QImage
+            from cv_bridge import CvBridge
+            bridge = CvBridge()
+            cv_image = bridge.imgmsg_to_cv2(msg, "bgr8")
+
+            # Преобразование OpenCV Image в QImage
+            height, width, channel = cv_image.shape
+            bytes_per_line = 3 * width
+            q_image = QImage(cv_image.data, width, height, bytes_per_line, QImage.Format_RGB888).rgbSwapped()
+
+            # Отображение изображения
+            pixmap = QPixmap.fromImage(q_image)
+            self.setPixmap(pixmap.scaled(self.width(), self.height(), Qt.KeepAspectRatio))
+
+        except Exception as e:
+            print(f"Error displaying {self.camera_name} image: {e}")
+
 class TurtleBotGUI(QMainWindow):
     # Сигналы для обновления скорости
     update_speed = pyqtSignal(float, float)
@@ -104,6 +132,11 @@ class TurtleBotGUI(QMainWindow):
         rospy.Subscriber('/odom', Odometry, self.odom_callback)
         rospy.Subscriber('/sensor_state', SensorState, self.sensor_callback)
         rospy.Subscriber('/scan', LaserScan, self.scan_callback)
+
+        # Подписка на камеры
+        from sensor_msgs.msg import Image
+        rospy.Subscriber('/front_camera/image_raw', Image, self.front_camera_callback)
+        rospy.Subscriber('/top_camera/image_raw', Image, self.top_camera_callback)
 
         # Текущие значения скорости
         self.linear_speed = 0.0
@@ -244,6 +277,18 @@ class TurtleBotGUI(QMainWindow):
         lidar_layout.addWidget(self.lidar_widget)
         lidar_group.setLayout(lidar_layout)
 
+        # Группа для камер
+        cameras_group = QGroupBox("Cameras")
+        cameras_layout = QHBoxLayout()
+
+        # Создаем виджеты для камер
+        self.front_camera_widget = CameraWidget("Front Camera")
+        self.top_camera_widget = CameraWidget("Top Camera")
+
+        cameras_layout.addWidget(self.front_camera_widget)
+        cameras_layout.addWidget(self.top_camera_widget)
+        cameras_group.setLayout(cameras_layout)
+
         # Информационная группа
         info_group = QGroupBox("Instructions")
         info_layout = QVBoxLayout()
@@ -267,6 +312,7 @@ class TurtleBotGUI(QMainWindow):
         main_layout.addWidget(control_group)
         main_layout.addWidget(speed_group)
         main_layout.addWidget(lidar_group)
+        main_layout.addWidget(cameras_group)
         main_layout.addWidget(info_group)
 
         central_widget.setLayout(main_layout)
@@ -350,6 +396,14 @@ class TurtleBotGUI(QMainWindow):
 
         # Обновляем виджет визуализации лидара
         self.lidar_widget.update_laser_data(msg)
+
+    def front_camera_callback(self, msg):
+        """Обработка изображения с передней камеры"""
+        self.front_camera_widget.update_image(msg)
+
+    def top_camera_callback(self, msg):
+        """Обработка изображения с верхней камеры"""
+        self.top_camera_widget.update_image(msg)
 
     def euler_from_quaternion(self, x, y, z, w):
         """

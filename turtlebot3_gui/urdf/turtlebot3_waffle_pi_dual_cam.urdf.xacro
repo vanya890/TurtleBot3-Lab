@@ -1,0 +1,133 @@
+<?xml version="1.0"?>
+<robot name="turtlebot3_waffle_pi_dual_cam" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- Включаем базовую модель Waffle Pi -->
+  <xacro:include filename="$(find turtlebot3_description)/urdf/turtlebot3_waffle_pi.urdf.xacro"/>
+
+  <!-- Добавляем вторую камеру (спереди) -->
+  <link name="front_camera_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.01 0.03 0.01"/>
+      </geometry>
+      <material name="black"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.01 0.03 0.01"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="0.0005"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <inertia ixx="0.00005" ixy="0.0" ixz="0.0" iyy="0.00005" iyz="0.0" izz="0.00005"/>
+    </inertial>
+  </link>
+
+  <!-- Добавляем третью камеру (сверху) -->
+  <link name="top_camera_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.01 0.03 0.01"/>
+      </geometry>
+      <material name="black"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.01 0.03 0.01"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="0.0005"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <inertia ixx="0.00005" ixy="0.0" ixz="0.0" iyy="0.00005" iyz="0.0" izz="0.00005"/>
+    </inertial>
+  </link>
+
+  <!-- Совместная фикция для передней камеры -->
+  <joint name="front_camera_joint" type="fixed">
+    <origin xyz="0.064 0 0.032" rpy="0 0 0"/>
+    <parent link="base_link"/>
+    <child link="front_camera_link"/>
+  </joint>
+
+  <!-- Совместная фикция для верхней камеры -->
+  <joint name="top_camera_joint" type="fixed">
+    <origin xyz="0 0 0.12" rpy="0 0.3 0"/>
+    <parent link="base_link"/>
+    <child link="top_camera_link"/>
+  </joint>
+
+  <!-- Gazebo плагин для передней камеры -->
+  <gazebo reference="front_camera_link">
+    <material>Gazebo/BlackTransparent</material>
+    <sensor type="camera" name="front_camera">
+      <update_rate>30.0</update_rate>
+      <camera name="front_camera">
+        <horizontal_fov>1.047</horizontal_fov>
+        <image>
+          <width>640</width>
+          <height>480</height>
+          <format>R8G8B8</format>
+        </image>
+        <clip>
+          <near>0.1</near>
+          <far>100.0</far>
+        </clip>
+      </camera>
+      <plugin name="front_camera_controller" filename="libgazebo_ros_camera.so">
+        <cameraName>front_camera</cameraName>
+        <alwaysOn>true</alwaysOn>
+        <updateRate>30.0</updateRate>
+        <imageTopicName>/front_camera/image_raw</imageTopicName>
+        <cameraInfoTopicName>/front_camera/camera_info</cameraInfoTopicName>
+        <frameName>front_camera_link</frameName>
+        <baseline>0.1</baseline>
+        <distortion_k1>0.0</distortion_k1>
+        <distortion_k2>0.0</distortion_k2>
+        <distortion_k3>0.0</distortion_k3>
+        <distortion_t1>0.0</distortion_t1>
+        <distortion_t2>0.0</distortion_t2>
+      </plugin>
+    </sensor>
+  </gazebo>
+
+  <!-- Gazebo плагин для верхней камеры -->
+  <gazebo reference="top_camera_link">
+    <material>Gazebo/BlackTransparent</material>
+    <sensor type="camera" name="top_camera">
+      <update_rate>30.0</update_rate>
+      <camera name="top_camera">
+        <horizontal_fov>1.047</horizontal_fov>
+        <image>
+          <width>640</width>
+          <height>480</height>
+          <format>R8G8B8</format>
+        </image>
+        <clip>
+          <near>0.1</near>
+          <far>100.0</far>
+        </clip>
+      </camera>
+      <plugin name="top_camera_controller" filename="libgazebo_ros_camera.so">
+        <cameraName>top_camera</cameraName>
+        <alwaysOn>true</alwaysOn>
+        <updateRate>30.0</updateRate>
+        <imageTopicName>/top_camera/image_raw</imageTopicName>
+        <cameraInfoTopicName>/top_camera/camera_info</cameraInfoTopicName>
+        <frameName>top_camera_link</frameName>
+        <baseline>0.1</baseline>
+        <distortion_k1>0.0</distortion_k1>
+        <distortion_k2>0.0</distortion_k2>
+        <distortion_k3>0.0</distortion_k3>
+        <distortion_t1>0.0</distortion_t1>
+        <distortion_t2>0.0</distortion_t2>
+      </plugin>
+    </sensor>
+  </gazebo>
+
+</robot>
