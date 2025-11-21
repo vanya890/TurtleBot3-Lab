@@ -1,0 +1,4 @@
+<launch>
+  <!-- Запуск GUI для управления TurtleBot3 -->
+  <node pkg="turtlebot3_gui" type="turtlebot_gui.py" name="turtlebot_gui" output="screen" />
+</launch>
