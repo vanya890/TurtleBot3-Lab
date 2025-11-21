@@ -4,13 +4,89 @@ import rospy
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                             QHBoxLayout, QPushButton, QLabel, QGridLayout, 
                             QGroupBox, QSlider, QFormLayout)
-from PyQt5.QtCore import QTimer, Qt, pyqtSignal
-from PyQt5.QtGui import QFont, QKeyEvent
+from PyQt5.QtCore import QTimer, Qt, pyqtSignal, QPointF
+from PyQt5.QtGui import (QFont, QKeyEvent, QPainter, QColor, QPen, QBrush, 
+                         QPolygonF, QTransform)
 from geometry_msgs.msg import Twist
 from sensor_msgs.msg import BatteryState, LaserScan
 from nav_msgs.msg import Odometry
 from turtlebot3_msgs.msg import SensorState
 import math
+
+class LidarWidget(QWidget):
+    def __init__(self, parent=None):
+        super(LidarWidget, self).__init__(parent)
+        self.laser_data = None
+        self.setMinimumSize(300, 300)
+
+    def update_laser_data(self, laser_data):
+        self.laser_data = laser_data
+        self.update()  # Перерисовать виджет
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+
+        # Размеры виджета
+        width = self.width()
+        height = self.height()
+        center_x = width / 2
+        center_y = height / 2
+        radius = min(width, height) / 2 - 10
+
+        # Фон
+        painter.fillRect(self.rect(), QColor(240, 240, 240))
+
+        # Рисуем робота в центре
+        painter.setPen(QPen(QColor(0, 0, 255), 2))
+        painter.setBrush(QBrush(QColor(200, 200, 255)))
+        painter.drawEllipse(QPointF(center_x, center_y), 10, 10)
+
+        # Рисуем круг для обзора лидара
+        painter.setPen(QPen(QColor(200, 200, 200), 1, Qt.DashLine))
+        painter.drawEllipse(QPointF(center_x, center_y), radius, radius)
+
+        # Если есть данные лидара, рисуем их
+        if self.laser_data is not None:
+            # Преобразуем данные лидара в точки на виджете
+            points = []
+            angle_min = self.laser_data.angle_min
+            angle_increment = self.laser_data.angle_increment
+            range_max = min(self.laser_data.range_max, radius * 0.9)
+
+            for i, range_val in enumerate(self.laser_data.ranges):
+                if math.isinf(range_val) or math.isnan(range_val):
+                    continue
+
+                # Ограничиваем максимальную дальность
+                if range_val > range_max:
+                    range_val = range_max
+
+                # Вычисляем угол
+                angle = angle_min + i * angle_increment
+
+                # Преобразуем в декартовы координаты
+                x = range_val * math.cos(angle)
+                y = range_val * math.sin(angle)
+
+                # Масштабируем и смещаем для отображения на виджете
+                # Y инвертируется, так как в Qt ось Y направлена вниз
+                scaled_x = center_x + x * radius / range_max
+                scaled_y = center_y - y * radius / range_max
+
+                points.append(QPointF(scaled_x, scaled_y))
+
+            # Рисуем точки лидара
+            if points:
+                painter.setPen(QPen(QColor(255, 0, 0), 2))
+                for point in points:
+                    painter.drawPoint(point)
+
+                # Соединяем точки линиями
+                painter.setPen(QPen(QColor(255, 100, 100), 1))
+                for i in range(len(points)):
+                    if i < len(points) - 1:
+                        painter.drawLine(points[i], points[i+1])
 
 class TurtleBotGUI(QMainWindow):
     # Сигналы для обновления скорости
@@ -160,6 +236,14 @@ class TurtleBotGUI(QMainWindow):
 
         speed_group.setLayout(speed_layout)
 
+        # Группа для визуализации лидара
+        lidar_group = QGroupBox("LIDAR Visualization")
+        lidar_layout = QVBoxLayout()
+
+        self.lidar_widget = LidarWidget()
+        lidar_layout.addWidget(self.lidar_widget)
+        lidar_group.setLayout(lidar_layout)
+
         # Информационная группа
         info_group = QGroupBox("Instructions")
         info_layout = QVBoxLayout()
@@ -182,6 +266,7 @@ class TurtleBotGUI(QMainWindow):
         main_layout.addWidget(data_group)
         main_layout.addWidget(control_group)
         main_layout.addWidget(speed_group)
+        main_layout.addWidget(lidar_group)
         main_layout.addWidget(info_group)
 
         central_widget.setLayout(main_layout)
@@ -262,6 +347,9 @@ class TurtleBotGUI(QMainWindow):
         # Находим максимальное расстояние (игнорируя бесконечность)
         ranges = [r for r in msg.ranges if not math.isinf(r)]
         self.max_range = max(ranges) if ranges else float('inf')
+
+        # Обновляем виджет визуализации лидара
+        self.lidar_widget.update_laser_data(msg)
 
     def euler_from_quaternion(self, x, y, z, w):
         """
