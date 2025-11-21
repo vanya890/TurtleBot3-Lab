@@ -33,6 +33,23 @@ class TurtleBotGUI(QMainWindow):
         self.linear_speed = 0.0
         self.angular_speed = 0.0
 
+        # Параметры робота для расчета одометрии
+        self.wheel_radius = 0.033  # Радиус колеса в метрах (для TurtleBot3 Burger)
+        self.wheel_base = 0.16  # Расстояние между колесами в метрах
+        self.ticks_per_rev = 4096  # Количество тиков энкодера на один оборот
+
+        # Переменные для расчета положения на основе энкодеров
+        self.prev_left_encoder = 0
+        self.prev_right_encoder = 0
+        self.left_encoder = 0  # Текущее значение левого энкодера
+        self.right_encoder = 0  # Текущее значение правого энкодера
+        self.encoder_x = 0.0  # Расчетная позиция X
+        self.encoder_y = 0.0  # Расчетная позиция Y
+        self.encoder_yaw = 0.0  # Расчетный угол ориентации
+
+        # Флаг для инициализации начальных значений энкодеров
+        self.encoders_initialized = False
+
         # Подключаем сигнал обновления скорости
         self.update_speed.connect(self.on_speed_update)
 
@@ -71,8 +88,12 @@ class TurtleBotGUI(QMainWindow):
         self.speed_label = QLabel('Speed: Linear: 0.0 m/s, Angular: 0.0 rad/s')
         self.speed_label.setFont(QFont("Arial", 12))
 
+        self.encoder_odom_label = QLabel('Encoder Odometry: X=0.0, Y=0.0, Yaw=0.0°')
+        self.encoder_odom_label.setFont(QFont("Arial", 12))
+
         data_layout.addWidget(self.battery_label)
         data_layout.addWidget(self.odom_label)
+        data_layout.addWidget(self.encoder_odom_label)
         data_layout.addWidget(self.scan_label)
         data_layout.addWidget(self.encoder_label)
         data_layout.addWidget(self.speed_label)
@@ -232,6 +253,9 @@ class TurtleBotGUI(QMainWindow):
         self.left_encoder = msg.left_encoder
         self.right_encoder = msg.right_encoder
 
+        # Расчет положения на основе данных энкодеров
+        self.calculate_odometry_from_encoders()
+
     def scan_callback(self, msg):
         # Находим минимальное расстояние
         self.min_range = min(msg.ranges)
@@ -263,10 +287,48 @@ class TurtleBotGUI(QMainWindow):
             self.battery_label.setText(f'Battery: {self.battery_voltage:.2f}V ({self.battery_percentage:.1f}%)')
         if hasattr(self, 'position_x'):
             self.odom_label.setText(f'Position: X={self.position_x:.2f}, Y={self.position_y:.2f}, Yaw={math.degrees(self.orientation_yaw):.1f}°')
+        if hasattr(self, 'encoder_x'):
+            self.encoder_odom_label.setText(f'Encoder Odometry: X={self.encoder_x:.2f}, Y={self.encoder_y:.2f}, Yaw={math.degrees(self.encoder_yaw):.1f}°')
         if hasattr(self, 'min_range'):
             self.scan_label.setText(f'Laser: Min={self.min_range:.2f}m, Max={self.max_range:.2f}m')
-        if hasattr(self, 'left_encoder'):
+        if hasattr(self, 'left_encoder') and hasattr(self, 'right_encoder'):
             self.encoder_label.setText(f'Encoders: Left={self.left_encoder}, Right={self.right_encoder}')
+
+    def calculate_odometry_from_encoders(self):
+        """
+        Расчет положения робота на основе данных с энкодеров
+        """
+        # Инициализация при первом вызове
+        if not self.encoders_initialized:
+            self.prev_left_encoder = self.left_encoder
+            self.prev_right_encoder = self.right_encoder
+            self.encoders_initialized = True
+            return
+
+        # Вычисляем изменение тиков энкодеров
+        delta_left = self.left_encoder - self.prev_left_encoder
+        delta_right = self.right_encoder - self.prev_right_encoder
+
+        # Сохраняем текущие значения энкодеров для следующего вызова
+        self.prev_left_encoder = self.left_encoder
+        self.prev_right_encoder = self.right_encoder
+
+        # Вычисляем расстояние, пройденное каждым колесом
+        # (количество тиков / тиков на оборот) * (2 * PI * радиус колеса)
+        left_distance = (delta_left / self.ticks_per_rev) * (2 * math.pi * self.wheel_radius)
+        right_distance = (delta_right / self.ticks_per_rev) * (2 * math.pi * self.wheel_radius)
+
+        # Вычисляем среднее расстояние и изменение угла
+        avg_distance = (left_distance + right_distance) / 2.0
+        delta_yaw = (right_distance - left_distance) / self.wheel_base
+
+        # Обновляем позицию с использованием дифференциального привода
+        self.encoder_x += avg_distance * math.cos(self.encoder_yaw + delta_yaw/2)
+        self.encoder_y += avg_distance * math.sin(self.encoder_yaw + delta_yaw/2)
+        self.encoder_yaw += delta_yaw
+
+        # Нормализуем угол в диапазон [-π, π]
+        self.encoder_yaw = math.atan2(math.sin(self.encoder_yaw), math.cos(self.encoder_yaw))
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
