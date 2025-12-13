@@ -4,8 +4,8 @@
   <!-- Включаем базовую модель Waffle Pi -->
   <xacro:include filename="$(find turtlebot3_description)/urdf/turtlebot3_waffle_pi.urdf.xacro"/>
 
-  <!-- Добавляем вторую камеру (спереди) -->
-  <link name="front_camera_link">
+  <!-- Добавляем левую камеру -->
+  <link name="left_camera_link">
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
@@ -26,8 +26,8 @@
     </inertial>
   </link>
 
-  <!-- Добавляем третью камеру (сверху) -->
-  <link name="top_camera_link">
+  <!-- Добавляем правую камеру -->
+  <link name="right_camera_link">
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
@@ -48,26 +48,26 @@
     </inertial>
   </link>
 
-  <!-- Совместная фикция для передней камеры -->
-  <joint name="front_camera_joint" type="fixed">
-    <origin xyz="0.064 0 0.032" rpy="0 0 0"/>
+  <!-- Совместная фикция для левой камеры -->
+  <joint name="left_camera_joint" type="fixed">
+    <origin xyz="0 0.064 0.032" rpy="0 0 0"/>
     <parent link="base_link"/>
-    <child link="front_camera_link"/>
+    <child link="left_camera_link"/>
   </joint>
 
-  <!-- Совместная фикция для верхней камеры -->
-  <joint name="top_camera_joint" type="fixed">
-    <origin xyz="0 0 0.12" rpy="0 0.3 0"/>
+  <!-- Совместная фикция для правой камеры -->
+  <joint name="right_camera_joint" type="fixed">
+    <origin xyz="0 -0.064 0.032" rpy="0 0 0"/>
     <parent link="base_link"/>
-    <child link="top_camera_link"/>
+    <child link="right_camera_link"/>
   </joint>
 
-  <!-- Gazebo плагин для передней камеры -->
-  <gazebo reference="front_camera_link">
+  <!-- Gazebo плагин для левой камеры -->
+  <gazebo reference="left_camera_link">
     <material>Gazebo/BlackTransparent</material>
-    <sensor type="camera" name="front_camera">
+    <sensor type="camera" name="left_camera">
       <update_rate>30.0</update_rate>
-      <camera name="front_camera">
+      <camera name="left_camera">
         <horizontal_fov>1.047</horizontal_fov>
         <image>
           <width>640</width>
@@ -79,13 +79,13 @@
           <far>100.0</far>
         </clip>
       </camera>
-      <plugin name="front_camera_controller" filename="libgazebo_ros_camera.so">
-        <cameraName>front_camera</cameraName>
+      <plugin name="left_camera_controller" filename="libgazebo_ros_camera.so">
+        <cameraName>left_camera</cameraName>
         <alwaysOn>true</alwaysOn>
         <updateRate>30.0</updateRate>
-        <imageTopicName>/front_camera/image_raw</imageTopicName>
-        <cameraInfoTopicName>/front_camera/camera_info</cameraInfoTopicName>
-        <frameName>front_camera_link</frameName>
+        <imageTopicName>/left_camera/image_raw</imageTopicName>
+        <cameraInfoTopicName>/left_camera/camera_info</cameraInfoTopicName>
+        <frameName>left_camera_link</frameName>
         <baseline>0.1</baseline>
         <distortion_k1>0.0</distortion_k1>
         <distortion_k2>0.0</distortion_k2>
@@ -96,12 +96,12 @@
     </sensor>
   </gazebo>
 
-  <!-- Gazebo плагин для верхней камеры -->
-  <gazebo reference="top_camera_link">
+  <!-- Gazebo плагин для правой камеры -->
+  <gazebo reference="right_camera_link">
     <material>Gazebo/BlackTransparent</material>
-    <sensor type="camera" name="top_camera">
+    <sensor type="camera" name="right_camera">
       <update_rate>30.0</update_rate>
-      <camera name="top_camera">
+      <camera name="right_camera">
         <horizontal_fov>1.047</horizontal_fov>
         <image>
           <width>640</width>
@@ -113,13 +113,13 @@
           <far>100.0</far>
         </clip>
       </camera>
-      <plugin name="top_camera_controller" filename="libgazebo_ros_camera.so">
-        <cameraName>top_camera</cameraName>
+      <plugin name="right_camera_controller" filename="libgazebo_ros_camera.so">
+        <cameraName>right_camera</cameraName>
         <alwaysOn>true</alwaysOn>
         <updateRate>30.0</updateRate>
-        <imageTopicName>/top_camera/image_raw</imageTopicName>
-        <cameraInfoTopicName>/top_camera/camera_info</cameraInfoTopicName>
-        <frameName>top_camera_link</frameName>
+        <imageTopicName>/right_camera/image_raw</imageTopicName>
+        <cameraInfoTopicName>/right_camera/camera_info</cameraInfoTopicName>
+        <frameName>right_camera_link</frameName>
         <baseline>0.1</baseline>
         <distortion_k1>0.0</distortion_k1>
         <distortion_k2>0.0</distortion_k2>

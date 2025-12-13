@@ -135,8 +135,8 @@ class TurtleBotGUI(QMainWindow):
 
         # Подписка на камеры
         from sensor_msgs.msg import Image
-        rospy.Subscriber('/front_camera/image_raw', Image, self.front_camera_callback)
-        rospy.Subscriber('/top_camera/image_raw', Image, self.top_camera_callback)
+        rospy.Subscriber('/left_camera/image_raw', Image, self.left_camera_callback)
+        rospy.Subscriber('/right_camera/image_raw', Image, self.right_camera_callback)
 
         # Текущие значения скорости
         self.linear_speed = 0.0
@@ -282,11 +282,11 @@ class TurtleBotGUI(QMainWindow):
         cameras_layout = QHBoxLayout()
 
         # Создаем виджеты для камер
-        self.front_camera_widget = CameraWidget("Front Camera")
-        self.top_camera_widget = CameraWidget("Top Camera")
+        self.left_camera_widget = CameraWidget("Left Camera")
+        self.right_camera_widget = CameraWidget("Right Camera")
 
-        cameras_layout.addWidget(self.front_camera_widget)
-        cameras_layout.addWidget(self.top_camera_widget)
+        cameras_layout.addWidget(self.left_camera_widget)
+        cameras_layout.addWidget(self.right_camera_widget)
         cameras_group.setLayout(cameras_layout)
 
         # Информационная группа
@@ -397,13 +397,13 @@ class TurtleBotGUI(QMainWindow):
         # Обновляем виджет визуализации лидара
         self.lidar_widget.update_laser_data(msg)
 
-    def front_camera_callback(self, msg):
-        """Обработка изображения с передней камеры"""
-        self.front_camera_widget.update_image(msg)
+    def left_camera_callback(self, msg):
+        """Обработка изображения с левой камеры"""
+        self.left_camera_widget.update_image(msg)
 
-    def top_camera_callback(self, msg):
-        """Обработка изображения с верхней камеры"""
-        self.top_camera_widget.update_image(msg)
+    def right_camera_callback(self, msg):
+        """Обработка изображения с правой камеры"""
+        self.right_camera_widget.update_image(msg)
 
     def euler_from_quaternion(self, x, y, z, w):
         """
