@@ -72,9 +72,13 @@ class LidarWidget(QWidget):
                     group_index = i + len(valid_ranges) // 2
                     angle = angle_min + group_index * angle_increment
 
+                    # Добавляем 90 градусов (π/2 радиан) для поворота отображения
+                    # Теперь 0 радиан будет указывать вверх, а не вправо
+                    rotated_angle = angle + math.pi / 2
+
                     # Преобразуем в декартовы координаты
-                    x = min_range * math.cos(angle)
-                    y = min_range * math.sin(angle)
+                    x = min_range * math.cos(rotated_angle)
+                    y = min_range * math.sin(rotated_angle)
 
                     # Масштабируем и смещаем для отображения на виджете
                     # Y инвертируется, так как в Qt ось Y направлена вниз
