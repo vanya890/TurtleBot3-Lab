@@ -17,7 +17,9 @@ class LidarWidget(QWidget):
     def __init__(self, parent=None):
         super(LidarWidget, self).__init__(parent)
         self.laser_data = None
-        self.setMinimumSize(300, 300)
+        self.setFixedSize(400, 400)  # Фиксированный размер 400x400 px
+        self.scale = 50  # 50 px/м
+        self.group_size = 5  # Количество соседних точек для объединения
 
     def update_laser_data(self, laser_data):
         self.laser_data = laser_data
@@ -48,39 +50,50 @@ class LidarWidget(QWidget):
 
         # Если есть данные лидара, рисуем их
         if self.laser_data is not None:
-            # Преобразуем данные лидара в точки на виджете
-            points = []
+            # Преобразуем данные лидара в точки на виджете с объединением соседних точек
             angle_min = self.laser_data.angle_min
             angle_increment = self.laser_data.angle_increment
-            range_max = min(self.laser_data.range_max, radius * 0.9)
+            max_display_range = min(width, height) / 2 / self.scale  # Максимальная дальность в метрах
+            range_max = min(self.laser_data.range_max, max_display_range)
 
-            for i, range_val in enumerate(self.laser_data.ranges):
-                if math.isinf(range_val) or math.isnan(range_val):
-                    continue
+            # Группируем соседние точки для повышения надежности
+            grouped_points = []
+            for i in range(0, len(self.laser_data.ranges), self.group_size):
+                group = self.laser_data.ranges[i:i+self.group_size]
+                valid_ranges = [r for r in group if not (math.isinf(r) or math.isnan(r))]
 
-                # Ограничиваем максимальную дальность
-                if range_val > range_max:
-                    range_val = range_max
+                if valid_ranges:
+                    # Находим минимальное значение в группе (ближайшую точку)
+                    min_range = min(valid_ranges)
+                    if min_range > range_max:
+                        min_range = range_max
 
-                # Вычисляем угол
-                angle = angle_min + i * angle_increment
+                    # Вычисляем средний угол для группы
+                    group_index = i + len(valid_ranges) // 2
+                    angle = angle_min + group_index * angle_increment
 
-                # Преобразуем в декартовы координаты
-                x = range_val * math.cos(angle)
-                y = range_val * math.sin(angle)
+                    # Преобразуем в декартовы координаты
+                    x = min_range * math.cos(angle)
+                    y = min_range * math.sin(angle)
 
-                # Масштабируем и смещаем для отображения на виджете
-                # Y инвертируется, так как в Qt ось Y направлена вниз
-                scaled_x = center_x + x * radius / range_max
-                scaled_y = center_y - y * radius / range_max
+                    # Масштабируем и смещаем для отображения на виджете
+                    # Y инвертируется, так как в Qt ось Y направлена вниз
+                    scaled_x = center_x + x * self.scale
+                    scaled_y = center_y - y * self.scale
 
-                points.append(QPointF(scaled_x, scaled_y))
+                    grouped_points.append(QPointF(scaled_x, scaled_y))
 
-            # Рисуем точки лидара
-            if points:
+            # Рисуем концы лучей как небольшие прямоугольники
+            if grouped_points:
                 painter.setPen(QPen(QColor(255, 0, 0), 2))
-                for point in points:
-                    painter.drawPoint(point)
+                painter.setBrush(QBrush(QColor(255, 0, 0)))
+                rect_size = 3  # Размер прямоугольника
+
+                for point in grouped_points:
+                    # Рисуем небольшой прямоугольник вместо точки
+                    painter.drawRect(point.x() - rect_size/2,
+                                    point.y() - rect_size/2,
+                                    rect_size, rect_size)
 
 class CameraWidget(QLabel):
     def __init__(self, camera_name="Camera", parent=None):
