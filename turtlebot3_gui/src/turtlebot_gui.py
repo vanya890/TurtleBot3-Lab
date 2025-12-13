@@ -127,10 +127,10 @@ class TurtleBotGUI(QMainWindow):
         rospy.Subscriber('/sensor_state', SensorState, self.sensor_callback)
         rospy.Subscriber('/scan', LaserScan, self.scan_callback)
 
-        # Подписка на камеры
+        # Подписка на обработанные камеры
         from sensor_msgs.msg import Image
-        rospy.Subscriber('/left_camera/image_raw', Image, self.left_camera_callback)
-        rospy.Subscriber('/right_camera/image_raw', Image, self.right_camera_callback)
+        rospy.Subscriber('/lane_camera/processed', Image, self.lane_camera_callback)
+        rospy.Subscriber('/top_camera/processed', Image, self.top_camera_callback)
 
         # Текущие значения скорости
         self.linear_speed = 0.0
@@ -276,11 +276,11 @@ class TurtleBotGUI(QMainWindow):
         cameras_layout = QHBoxLayout()
 
         # Создаем виджеты для камер
-        self.left_camera_widget = CameraWidget("Left Camera")
-        self.right_camera_widget = CameraWidget("Right Camera")
+        self.lane_camera_widget = CameraWidget("Lane Camera")
+        self.top_camera_widget = CameraWidget("Top Camera")
 
-        cameras_layout.addWidget(self.left_camera_widget)
-        cameras_layout.addWidget(self.right_camera_widget)
+        cameras_layout.addWidget(self.lane_camera_widget)
+        cameras_layout.addWidget(self.top_camera_widget)
         cameras_group.setLayout(cameras_layout)
 
         # Информационная группа
@@ -391,13 +391,13 @@ class TurtleBotGUI(QMainWindow):
         # Обновляем виджет визуализации лидара
         self.lidar_widget.update_laser_data(msg)
 
-    def left_camera_callback(self, msg):
-        """Обработка изображения с левой камеры"""
-        self.left_camera_widget.update_image(msg)
+    def lane_camera_callback(self, msg):
+        """Обработка изображения с lane камеры"""
+        self.lane_camera_widget.update_image(msg)
 
-    def right_camera_callback(self, msg):
-        """Обработка изображения с правой камеры"""
-        self.right_camera_widget.update_image(msg)
+    def top_camera_callback(self, msg):
+        """Обработка изображения с top камеры"""
+        self.top_camera_widget.update_image(msg)
 
     def euler_from_quaternion(self, x, y, z, w):
         """

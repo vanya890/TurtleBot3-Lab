@@ -20,14 +20,17 @@
   <node pkg="turtlebot3_gui" type="sensor_state_simulator.py" name="sensor_state_simulator" output="screen"/>
 
   <!-- Узлы обработки изображений с камер -->
-  <node pkg="turtlebot3_gui" type="camera_processor.py" name="left_camera_processor" output="screen">
-    <param name="camera_name" value="left_camera"/>
+  <node pkg="turtlebot3_gui" type="camera_processor.py" name="lane_camera_processor" output="screen">
+    <param name="~camera_name" value="lane_camera"/>
   </node>
 
-  <node pkg="turtlebot3_gui" type="camera_processor.py" name="right_camera_processor" output="screen">
-    <param name="camera_name" value="right_camera"/>
+  <node pkg="turtlebot3_gui" type="camera_processor.py" name="top_camera_processor" output="screen">
+    <param name="~camera_name" value="top_camera"/>
   </node>
 
   <!-- Запуск GUI приложения -->
   <node pkg="turtlebot3_gui" type="turtlebot_gui.py" name="turtlebot_gui" output="screen"/>
+
+  <!-- Запуск миссии для автоматизации -->
+  <node pkg="turtlebot3_autorace_core" type="core_node_mission" name="core_node_mission" output="screen"/>
 </launch>
