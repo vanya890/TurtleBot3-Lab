@@ -136,6 +136,15 @@ class TurtleBotGUI(QMainWindow):
         self.linear_speed = 0.0
         self.angular_speed = 0.0
 
+        # Состояния управления движением
+        self.movement_state = 'none'  # 'forward', 'backward', 'none'
+        self.rotation_state = 'none'  # 'left', 'right', 'none'
+        self.auto_mode = False  # Флаг автономного режима
+
+        # Параметры скоростей
+        self.base_linear_speed = 0.15  # Основная линейная скорость (м/с)
+        self.rotation_increment = 0.4  # Дифференциальная разница для поворотов (rad/s)
+
         # Параметры робота для расчета одометрии
         self.wheel_radius = 0.033  # Радиус колеса в метрах (для TurtleBot3 Burger)
         self.wheel_base = 0.16  # Расстояние между колесами в метрах
@@ -162,6 +171,11 @@ class TurtleBotGUI(QMainWindow):
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_display)
         self.timer.start(100)  # Обновление каждые 100 мс
+
+        # Таймер для постоянного управления движением
+        self.control_timer = QTimer()
+        self.control_timer.timeout.connect(self.update_robot_control)
+        self.control_timer.start(100)
 
     def init_ui(self):
         self.setWindowTitle('TurtleBot3 Control Panel')
@@ -194,41 +208,60 @@ class TurtleBotGUI(QMainWindow):
         self.encoder_odom_label = QLabel('Encoder Odometry: X=0.0, Y=0.0, Yaw=0.0°')
         self.encoder_odom_label.setFont(QFont("Arial", 12))
 
+        self.mode_label = QLabel('Mode: Manual, Movement: none, Rotation: none')
+        self.mode_label.setFont(QFont("Arial", 12))
+
         data_layout.addWidget(self.battery_label)
         data_layout.addWidget(self.odom_label)
         data_layout.addWidget(self.encoder_odom_label)
         data_layout.addWidget(self.scan_label)
         data_layout.addWidget(self.encoder_label)
         data_layout.addWidget(self.speed_label)
+        data_layout.addWidget(self.mode_label)
         data_group.setLayout(data_layout)
 
         # Группа для управления кнопками
         control_group = QGroupBox("Robot Control")
         control_layout = QGridLayout()
 
-        # Кнопки управления
-        forward_btn = QPushButton('Forward (W)')
-        forward_btn.clicked.connect(lambda: self.move_robot(0.2, 0.0))
+        # Кнопка авторежима
+        self.auto_btn = QPushButton('AUTO MODE')
+        self.auto_btn.setCheckable(True)
+        self.auto_btn.setStyleSheet("background-color: orange;")
+        self.auto_btn.clicked.connect(self.on_auto_toggle)
+        control_layout.addWidget(self.auto_btn, 0, 0, 1, 3)  # spanning across top
 
-        backward_btn = QPushButton('Backward (S)')
-        backward_btn.clicked.connect(lambda: self.move_robot(-0.2, 0.0))
+        # Кнопки управления движением
+        self.forward_btn = QPushButton('Forward (W)')
+        self.forward_btn.setCheckable(True)
+        self.forward_btn.clicked.connect(self.on_forward_toggle)
 
-        left_btn = QPushButton('Left (A)')
-        left_btn.clicked.connect(lambda: self.move_robot(0.0, 0.5))
+        self.backward_btn = QPushButton('Backward (S)')
+        self.backward_btn.setCheckable(True)
+        self.backward_btn.clicked.connect(self.on_backward_toggle)
 
-        right_btn = QPushButton('Right (D)')
-        right_btn.clicked.connect(lambda: self.move_robot(0.0, -0.5))
+        self.left_btn = QPushButton('Start Left Turn (A)')
+        self.left_btn.setCheckable(True)
+        self.left_btn.clicked.connect(self.on_left_rotation_toggle)
 
-        stop_btn = QPushButton('STOP (Space)')
-        stop_btn.setStyleSheet("background-color: red; color: white;")
-        stop_btn.clicked.connect(lambda: self.move_robot(0.0, 0.0))
+        self.right_btn = QPushButton('Start Right Turn (D)')
+        self.right_btn.setCheckable(True)
+        self.right_btn.clicked.connect(self.on_right_rotation_toggle)
 
-        # Размещение кнопок в сетке
-        control_layout.addWidget(forward_btn, 0, 1)
-        control_layout.addWidget(left_btn, 1, 0)
-        control_layout.addWidget(stop_btn, 1, 1)
-        control_layout.addWidget(right_btn, 1, 2)
-        control_layout.addWidget(backward_btn, 2, 1)
+        self.stop_turn_btn = QPushButton('Stop Turn')
+        self.stop_turn_btn.clicked.connect(self.on_stop_turn_toggle)
+
+        self.stop_btn = QPushButton('STOP (Space)')
+        self.stop_btn.setStyleSheet("background-color: red; color: white;")
+        self.stop_btn.clicked.connect(self.on_stop_toggle)
+
+        # Размещение кнопок
+        control_layout.addWidget(self.left_btn, 1, 0)
+        control_layout.addWidget(self.forward_btn, 1, 1)
+        control_layout.addWidget(self.right_btn, 1, 2)
+        control_layout.addWidget(self.stop_turn_btn, 2, 0)
+        control_layout.addWidget(self.stop_btn, 2, 1)
+        control_layout.addWidget(self.backward_btn, 3, 1)
 
         control_group.setLayout(control_layout)
 
@@ -317,6 +350,7 @@ class TurtleBotGUI(QMainWindow):
 
     def keyPressEvent(self, event: QKeyEvent):
         """Обработка нажатий клавиатуры"""
+        if self.auto_mode: return
         key = event.key()
 
         if key == Qt.Key_W or key == Qt.Key_Up:
@@ -330,14 +364,28 @@ class TurtleBotGUI(QMainWindow):
         elif key == Qt.Key_Space:
             self.update_speed.emit(0.0, 0.0)
 
+    def keyReleaseEvent(self, event: QKeyEvent):
+        """Обработка отпускания клавиш"""
+        if self.auto_mode: return
+        key = event.key()
+
+        if key in (Qt.Key_A, Qt.Key_Left, Qt.Key_D, Qt.Key_Right):
+            # Сброс угловой скорости при отпускании клавиш поворота
+            self.update_speed.emit(self.linear_speed, 0.0)
+        elif key in (Qt.Key_W, Qt.Key_Up, Qt.Key_S, Qt.Key_Down):
+            # Сброс линейной скорости при отпускании клавиш движения вперед/назад
+            self.update_speed.emit(0.0, self.angular_speed)
+
     def on_linear_slider_change(self, value):
         """Обработка изменения слайдера линейной скорости"""
+        if self.auto_mode: return
         linear_speed = value / 100.0  # Преобразуем в диапазон -1.0 до 1.0
         self.update_speed.emit(linear_speed, self.angular_speed)
         self.linear_value_label.setText(f"{linear_speed:.2f} m/s")
 
     def on_angular_slider_change(self, value):
         """Обработка изменения слайдера угловой скорости"""
+        if self.auto_mode: return
         angular_speed = value / 100.0  # Преобразуем в диапазон -1.0 до 1.0
         self.update_speed.emit(self.linear_speed, angular_speed)
         self.angular_value_label.setText(f"{angular_speed:.2f} rad/s")
@@ -429,6 +477,7 @@ class TurtleBotGUI(QMainWindow):
             self.scan_label.setText(f'Laser: Min={self.min_range:.2f}m, Max={self.max_range:.2f}m')
         if hasattr(self, 'left_encoder') and hasattr(self, 'right_encoder'):
             self.encoder_label.setText(f'Encoders: Left={self.left_encoder}, Right={self.right_encoder}')
+        self.mode_label.setText(f'Mode: {"Auto" if self.auto_mode else "Manual"}, Movement: {self.movement_state}, Rotation: {self.rotation_state}')
 
     def calculate_odometry_from_encoders(self):
         """
@@ -465,6 +514,92 @@ class TurtleBotGUI(QMainWindow):
 
         # Нормализуем угол в диапазон [-π, π]
         self.encoder_yaw = math.atan2(math.sin(self.encoder_yaw), math.cos(self.encoder_yaw))
+
+    # Методы управления движением
+
+    def on_forward_toggle(self):
+        if self.auto_mode: return
+        if self.forward_btn.isChecked():
+            self.movement_state = 'forward'
+            self.backward_btn.setChecked(False)
+        else:
+            self.movement_state = 'none'
+
+    def on_backward_toggle(self):
+        if self.auto_mode: return
+        if self.backward_btn.isChecked():
+            self.movement_state = 'backward'
+            self.forward_btn.setChecked(False)
+        else:
+            self.movement_state = 'none'
+
+    def on_stop_turn_toggle(self):
+        if self.auto_mode: return
+        self.rotation_state = 'none'
+        self.left_btn.setChecked(False)
+        self.right_btn.setChecked(False)
+
+    def on_stop_toggle(self):
+        if self.auto_mode: return
+        self.movement_state = 'none'
+        self.rotation_state = 'none'
+        self.forward_btn.setChecked(False)
+        self.backward_btn.setChecked(False)
+        self.left_btn.setChecked(False)
+        self.right_btn.setChecked(False)
+
+    def on_left_rotation_toggle(self):
+        if self.auto_mode: return
+        if self.left_btn.isChecked():
+            self.rotation_state = 'left'
+            self.right_btn.setChecked(False)
+        else:
+            self.rotation_state = 'none'
+
+    def on_right_rotation_toggle(self):
+        if self.auto_mode: return
+        if self.right_btn.isChecked():
+            self.rotation_state = 'right'
+            self.left_btn.setChecked(False)
+        else:
+            self.rotation_state = 'none'
+
+    def on_auto_toggle(self):
+        self.auto_mode = self.auto_btn.isChecked()
+        manual_enabled = not self.auto_mode
+        self.forward_btn.setEnabled(manual_enabled)
+        self.backward_btn.setEnabled(manual_enabled)
+        self.left_btn.setEnabled(manual_enabled)
+        self.right_btn.setEnabled(manual_enabled)
+        self.stop_turn_btn.setEnabled(manual_enabled)
+        self.stop_btn.setEnabled(manual_enabled)
+        self.linear_slider.setEnabled(manual_enabled)
+        self.angular_slider.setEnabled(manual_enabled)
+        if not manual_enabled:
+            # Reset states
+            self.movement_state = 'none'
+            self.rotation_state = 'none'
+            self.forward_btn.setChecked(False)
+            self.backward_btn.setChecked(False)
+            self.left_btn.setChecked(False)
+            self.right_btn.setChecked(False)
+            self.move_robot(0, 0)
+
+    def update_robot_control(self):
+        if self.auto_mode: return
+        linear = 0.0
+        angular = 0.0
+        if self.movement_state == 'forward':
+            linear = self.base_linear_speed
+        elif self.movement_state == 'backward':
+            linear = -self.base_linear_speed
+        
+        if self.rotation_state == 'left':
+            angular = self.rotation_increment
+        elif self.rotation_state == 'right':
+            angular = -self.rotation_increment
+        
+        self.move_robot(linear, angular)
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
