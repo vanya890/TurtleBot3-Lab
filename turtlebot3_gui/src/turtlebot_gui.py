@@ -11,6 +11,7 @@ from geometry_msgs.msg import Twist
 from sensor_msgs.msg import BatteryState, LaserScan
 from nav_msgs.msg import Odometry
 from turtlebot3_msgs.msg import SensorState
+from std_msgs.msg import Int32, String
 import math
 
 class LidarWidget(QWidget):
@@ -138,6 +139,12 @@ class TurtleBotGUI(QMainWindow):
         # Publishers
         self.cmd_vel_pub = rospy.Publisher('/cmd_vel', Twist, queue_size=10)
 
+        # Publishers для управления визуализацией камер
+        self.lane_mode_pub = rospy.Publisher('/lane_camera/visualization_mode', Int32, queue_size=10)
+        self.top_mode_pub = rospy.Publisher('/top_camera/visualization_mode', Int32, queue_size=10)
+        self.lane_text_pub = rospy.Publisher('/lane_camera/text_overlay', String, queue_size=10)
+        self.top_text_pub = rospy.Publisher('/top_camera/text_overlay', String, queue_size=10)
+
         # Subscribers
         rospy.Subscriber('/odom', Odometry, self.odom_callback)
         rospy.Subscriber('/sensor_state', SensorState, self.sensor_callback)
@@ -156,6 +163,12 @@ class TurtleBotGUI(QMainWindow):
         self.movement_state = 'none'  # 'forward', 'backward', 'none'
         self.rotation_state = 'none'  # 'left', 'right', 'none'
         self.auto_mode = False  # Флаг автономного режима
+
+        # Состояния управления визуализацией
+        self.text_overlay_enabled = False  # Флаг включения текстового оверлея
+        self.visualization_text_buffer = ""  # Буфер для текстовых сообщений
+        self.lane_mode = 0  # Режим визуализации для lane камеры
+        self.top_mode = 0  # Режим визуализации для top камеры
 
         # Параметры скоростей
         self.base_linear_speed = 0.15  # Основная линейная скорость (м/с)
@@ -312,6 +325,33 @@ class TurtleBotGUI(QMainWindow):
         speed_group = QGroupBox("Speed Control")
         speed_layout = QFormLayout()
 
+        # Группа для управления визуализацией
+        visualization_group = QGroupBox("Camera Visualization Control")
+        visualization_layout = QFormLayout()
+
+        # Элементы управления для режимов визуализации
+        self.lane_mode_edit = QLineEdit('0')
+        self.top_mode_edit = QLineEdit('0')
+        self.apply_modes_btn = QPushButton('Apply Visualization Modes')
+        self.apply_modes_btn.clicked.connect(self.on_apply_modes)
+
+        # Элементы управления для текстового оверлея
+        self.text_overlay_edit = QLineEdit()
+        self.text_overlay_edit.setPlaceholderText("Enter text to display on images")
+        self.text_overlay_toggle = QPushButton('Toggle Text Overlay')
+        self.text_overlay_toggle.setCheckable(True)
+        self.text_overlay_toggle.setChecked(False)
+        self.text_overlay_toggle.clicked.connect(self.on_text_overlay_toggle)
+
+        # Добавляем элементы в layout визуализации
+        visualization_layout.addRow("Lane Camera Mode:", self.lane_mode_edit)
+        visualization_layout.addRow("Top Camera Mode:", self.top_mode_edit)
+        visualization_layout.addRow(self.apply_modes_btn)
+        visualization_layout.addRow("Text Overlay:", self.text_overlay_edit)
+        visualization_layout.addRow(self.text_overlay_toggle)
+
+        visualization_group.setLayout(visualization_layout)
+
         # Создаем слайдеры для управления скоростью
         self.linear_slider = QSlider(Qt.Horizontal)
         self.linear_slider.setMinimum(-100)
@@ -361,6 +401,7 @@ class TurtleBotGUI(QMainWindow):
         control_tab_layout.addWidget(data_group)
         control_tab_layout.addWidget(control_group)
         control_tab_layout.addWidget(speed_group)
+        control_tab_layout.addWidget(visualization_group)
         control_tab_layout.addWidget(info_group)
         control_tab.setLayout(control_tab_layout)
 
@@ -439,6 +480,56 @@ class TurtleBotGUI(QMainWindow):
         linear_speed = value / 100.0  # Преобразуем в диапазон -1.0 до 1.0
         self.update_speed.emit(linear_speed, self.angular_speed)
         self.linear_value_label.setText(f"{linear_speed:.2f} m/s")
+
+    def on_apply_modes(self):
+        """Применение режимов визуализации"""
+        try:
+            lane_mode = int(self.lane_mode_edit.text())
+            top_mode = int(self.top_mode_edit.text())
+
+            # Ограничиваем режимы допустимыми значениями
+            lane_mode = max(0, min(2, lane_mode))
+            top_mode = max(0, min(2, top_mode))
+
+            self.lane_mode = lane_mode
+            self.top_mode = top_mode
+
+            # Публикуем режимы
+            self.lane_mode_pub.publish(lane_mode)
+            self.top_mode_pub.publish(top_mode)
+
+            # Обновляем текстовые поля с корректными значениями
+            self.lane_mode_edit.setText(str(lane_mode))
+            self.top_mode_edit.setText(str(top_mode))
+
+            rospy.loginfo(f"Visualization modes set: Lane={lane_mode}, Top={top_mode}")
+
+        except ValueError:
+            rospy.logerr("Invalid mode values. Please enter integers 0-2.")
+
+    def on_text_overlay_toggle(self):
+        """Переключение текстового оверлея"""
+        self.text_overlay_enabled = self.text_overlay_toggle.isChecked()
+
+        if self.text_overlay_enabled:
+            # Применяем текущий текст из буфера
+            self.apply_text_overlay()
+        else:
+            # Отключаем текстовый оверлей
+            self.lane_text_pub.publish(String(data=""))
+            self.top_text_pub.publish(String(data=""))
+            rospy.loginfo("Text overlay disabled")
+
+    def apply_text_overlay(self):
+        """Применение текстового оверлея"""
+        text = self.text_overlay_edit.text()
+        self.visualization_text_buffer = text
+
+        if self.text_overlay_enabled and text:
+            # Публикуем текст для обеих камер
+            self.lane_text_pub.publish(String(data=text))
+            self.top_text_pub.publish(String(data=text))
+            rospy.loginfo(f"Text overlay applied: {text}")
 
     def on_angular_slider_change(self, value):
         """Обработка изменения слайдера угловой скорости"""
@@ -529,6 +620,12 @@ class TurtleBotGUI(QMainWindow):
         if hasattr(self, 'left_encoder') and hasattr(self, 'right_encoder'):
             self.encoder_label.setText(f'Encoders: Left={self.left_encoder}, Right={self.right_encoder}')
         self.mode_label.setText(f'Mode: {"Auto" if self.auto_mode else "Manual"}, Movement: {self.movement_state}, Rotation: {self.rotation_state}')
+
+        # Обновляем текстовый оверлей, если он включен
+        if self.text_overlay_enabled and hasattr(self, 'text_overlay_edit'):
+            current_text = self.text_overlay_edit.text()
+            if current_text != self.visualization_text_buffer:
+                self.apply_text_overlay()
 
     def calculate_odometry_from_encoders(self):
         """
