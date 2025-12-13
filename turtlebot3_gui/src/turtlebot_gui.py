@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 import sys
 import rospy
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
-                            QHBoxLayout, QPushButton, QLabel, QGridLayout, 
-                            QGroupBox, QSlider, QFormLayout)
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
+                            QHBoxLayout, QPushButton, QLabel, QGridLayout,
+                            QGroupBox, QSlider, QFormLayout, QLineEdit)
 from PyQt5.QtCore import QTimer, Qt, pyqtSignal, QPointF
 from PyQt5.QtGui import (QFont, QKeyEvent, QPainter, QColor, QPen, QBrush, 
                          QPolygonF, QTransform, QImage, QPixmap)
@@ -122,7 +122,6 @@ class TurtleBotGUI(QMainWindow):
         self.cmd_vel_pub = rospy.Publisher('/cmd_vel', Twist, queue_size=10)
 
         # Subscribers
-        rospy.Subscriber('/battery_state', BatteryState, self.battery_callback)
         rospy.Subscriber('/odom', Odometry, self.odom_callback)
         rospy.Subscriber('/sensor_state', SensorState, self.sensor_callback)
         rospy.Subscriber('/scan', LaserScan, self.scan_callback)
@@ -159,6 +158,11 @@ class TurtleBotGUI(QMainWindow):
         self.encoder_y = 0.0  # Расчетная позиция Y
         self.encoder_yaw = 0.0  # Расчетный угол ориентации
 
+        # Стартовые координаты
+        self.start_x = 0.0
+        self.start_y = 0.0
+        self.start_yaw = 0.0  # в радианах
+
         # Флаг для инициализации начальных значений энкодеров
         self.encoders_initialized = False
 
@@ -189,9 +193,17 @@ class TurtleBotGUI(QMainWindow):
         data_group = QGroupBox("Sensor Data")
         data_layout = QVBoxLayout()
 
-        # Создание виджетов для отображения данных
-        self.battery_label = QLabel('Battery: --')
-        self.battery_label.setFont(QFont("Arial", 12))
+        # Start Position Inputs
+        start_pos_layout = QHBoxLayout()
+        start_pos_layout.addWidget(QLabel('Start X:'))
+        self.start_x_edit = QLineEdit('0.0')
+        start_pos_layout.addWidget(self.start_x_edit)
+        start_pos_layout.addWidget(QLabel('Y:'))
+        self.start_y_edit = QLineEdit('0.0')
+        start_pos_layout.addWidget(self.start_y_edit)
+        start_pos_layout.addWidget(QLabel('Yaw (°):'))
+        self.start_yaw_edit = QLineEdit('0.0')
+        start_pos_layout.addWidget(self.start_yaw_edit)
 
         self.odom_label = QLabel('Position: --')
         self.odom_label.setFont(QFont("Arial", 12))
@@ -211,7 +223,9 @@ class TurtleBotGUI(QMainWindow):
         self.mode_label = QLabel('Mode: Manual, Movement: none, Rotation: none')
         self.mode_label.setFont(QFont("Arial", 12))
 
-        data_layout.addWidget(self.battery_label)
+        start_pos_widget = QWidget()
+        start_pos_widget.setLayout(start_pos_layout)
+        data_layout.addWidget(start_pos_widget)
         data_layout.addWidget(self.odom_label)
         data_layout.addWidget(self.encoder_odom_label)
         data_layout.addWidget(self.scan_label)
@@ -251,6 +265,9 @@ class TurtleBotGUI(QMainWindow):
         self.stop_turn_btn = QPushButton('Stop Turn')
         self.stop_turn_btn.clicked.connect(self.on_stop_turn_toggle)
 
+        self.reset_odom_btn = QPushButton('Reset Odometry')
+        self.reset_odom_btn.clicked.connect(self.on_reset_odom)
+
         self.stop_btn = QPushButton('STOP (Space)')
         self.stop_btn.setStyleSheet("background-color: red; color: white;")
         self.stop_btn.clicked.connect(self.on_stop_toggle)
@@ -262,6 +279,7 @@ class TurtleBotGUI(QMainWindow):
         control_layout.addWidget(self.stop_turn_btn, 2, 0)
         control_layout.addWidget(self.stop_btn, 2, 1)
         control_layout.addWidget(self.backward_btn, 3, 1)
+        control_layout.addWidget(self.reset_odom_btn, 4, 1)
 
         control_group.setLayout(control_layout)
 
@@ -409,10 +427,6 @@ class TurtleBotGUI(QMainWindow):
         self.cmd_vel_pub.publish(twist)
         self.speed_label.setText(f'Speed: Linear: {linear:.2f} m/s, Angular: {angular:.2f} rad/s')
 
-    def battery_callback(self, msg):
-        self.battery_voltage = msg.voltage
-        self.battery_percentage = msg.percentage
-
     def odom_callback(self, msg):
         self.position_x = msg.pose.pose.position.x
         self.position_y = msg.pose.pose.position.y
@@ -467,8 +481,6 @@ class TurtleBotGUI(QMainWindow):
         return roll_x, pitch_y, yaw_z  # в радианах
 
     def update_display(self):
-        if hasattr(self, 'battery_voltage'):
-            self.battery_label.setText(f'Battery: {self.battery_voltage:.2f}V ({self.battery_percentage:.1f}%)')
         if hasattr(self, 'position_x'):
             self.odom_label.setText(f'Position: X={self.position_x:.2f}, Y={self.position_y:.2f}, Yaw={math.degrees(self.orientation_yaw):.1f}°')
         if hasattr(self, 'encoder_x'):
@@ -584,6 +596,18 @@ class TurtleBotGUI(QMainWindow):
             self.left_btn.setChecked(False)
             self.right_btn.setChecked(False)
             self.move_robot(0, 0)
+
+    def on_reset_odom(self):
+        try:
+            self.start_x = float(self.start_x_edit.text())
+            self.start_y = float(self.start_y_edit.text())
+            self.start_yaw = math.radians(float(self.start_yaw_edit.text()))
+            self.encoder_x = self.start_x
+            self.encoder_y = self.start_y
+            self.encoder_yaw = self.start_yaw
+            self.encoders_initialized = False  # Reset encoders for next calculation
+        except ValueError:
+            print("Invalid start coordinates")
 
     def update_robot_control(self):
         if self.auto_mode: return
