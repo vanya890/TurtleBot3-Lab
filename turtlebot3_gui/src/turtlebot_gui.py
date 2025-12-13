@@ -144,6 +144,8 @@ class TurtleBotGUI(QMainWindow):
         self.top_mode_pub = rospy.Publisher('/top_camera/visualization_mode', Int32, queue_size=10)
         self.lane_text_pub = rospy.Publisher('/lane_camera/text_overlay', String, queue_size=10)
         self.top_text_pub = rospy.Publisher('/top_camera/text_overlay', String, queue_size=10)
+        self.lane_angle_pub = rospy.Publisher('/lane_camera/perspective_angle', Int32, queue_size=10)
+        self.top_angle_pub = rospy.Publisher('/top_camera/perspective_angle', Int32, queue_size=10)
 
         # Subscribers
         rospy.Subscriber('/odom', Odometry, self.odom_callback)
@@ -169,6 +171,9 @@ class TurtleBotGUI(QMainWindow):
         self.visualization_text_buffer = ""  # Буфер для текстовых сообщений
         self.lane_mode = 0  # Режим визуализации для lane камеры
         self.top_mode = 0  # Режим визуализации для top камеры
+        self.perspective_correction_enabled = False  # Флаг включения коррекции перспективы
+        self.perspective_angle = 30.0  # Угол наклона для коррекции перспективы
+        self.lane_detection_enabled = False  # Флаг включения детектирования линий разметки
 
         # Параметры скоростей
         self.base_linear_speed = 0.15  # Основная линейная скорость (м/с)
@@ -343,12 +348,40 @@ class TurtleBotGUI(QMainWindow):
         self.text_overlay_toggle.setChecked(False)
         self.text_overlay_toggle.clicked.connect(self.on_text_overlay_toggle)
 
+        # Элементы управления для детектирования линий разметки
+        self.lane_detection_toggle = QPushButton('Toggle Lane Detection')
+        self.lane_detection_toggle.setCheckable(True)
+        self.lane_detection_toggle.setChecked(False)
+        self.lane_detection_toggle.clicked.connect(self.on_lane_detection_toggle)
+
+        # Элементы управления для коррекции перспективы
+        self.perspective_toggle = QPushButton('Toggle Perspective Correction')
+        self.perspective_toggle.setCheckable(True)
+        self.perspective_toggle.setChecked(False)
+        self.perspective_toggle.clicked.connect(self.on_perspective_toggle)
+
+        self.perspective_angle_slider = QSlider(Qt.Horizontal)
+        self.perspective_angle_slider.setMinimum(10)
+        self.perspective_angle_slider.setMaximum(360)
+        self.perspective_angle_slider.setValue(180)
+        self.perspective_angle_slider.setTickPosition(QSlider.TicksBelow)
+        self.perspective_angle_slider.setTickInterval(10)
+        self.perspective_angle_slider.valueChanged.connect(self.on_perspective_angle_change)
+
+        self.perspective_angle_label = QLabel("Perspective Angle: 30°")
+
         # Добавляем элементы в layout визуализации
         visualization_layout.addRow("Lane Camera Mode:", self.lane_mode_edit)
         visualization_layout.addRow("Top Camera Mode:", self.top_mode_edit)
         visualization_layout.addRow(self.apply_modes_btn)
         visualization_layout.addRow("Text Overlay:", self.text_overlay_edit)
         visualization_layout.addRow(self.text_overlay_toggle)
+        visualization_layout.addRow(QLabel("Lane Detection:"))
+        visualization_layout.addRow(self.lane_detection_toggle)
+        visualization_layout.addRow(QLabel("Perspective Correction:"))
+        visualization_layout.addRow(self.perspective_toggle)
+        visualization_layout.addRow("Angle:", self.perspective_angle_slider)
+        visualization_layout.addRow("", self.perspective_angle_label)
 
         visualization_group.setLayout(visualization_layout)
 
@@ -487,9 +520,9 @@ class TurtleBotGUI(QMainWindow):
             lane_mode = int(self.lane_mode_edit.text())
             top_mode = int(self.top_mode_edit.text())
 
-            # Ограничиваем режимы допустимыми значениями
-            lane_mode = max(0, min(2, lane_mode))
-            top_mode = max(0, min(2, top_mode))
+            # Ограничиваем режимы допустимыми значениями (0-3)
+            lane_mode = max(0, min(3, lane_mode))
+            top_mode = max(0, min(3, top_mode))
 
             self.lane_mode = lane_mode
             self.top_mode = top_mode
@@ -502,10 +535,18 @@ class TurtleBotGUI(QMainWindow):
             self.lane_mode_edit.setText(str(lane_mode))
             self.top_mode_edit.setText(str(top_mode))
 
+            # Обновляем состояние переключателя коррекции перспективы
+            if lane_mode == 3 and top_mode == 3:
+                self.perspective_correction_enabled = True
+                self.perspective_toggle.setChecked(True)
+            else:
+                self.perspective_correction_enabled = False
+                self.perspective_toggle.setChecked(False)
+
             rospy.loginfo(f"Visualization modes set: Lane={lane_mode}, Top={top_mode}")
 
         except ValueError:
-            rospy.logerr("Invalid mode values. Please enter integers 0-2.")
+            rospy.logerr("Invalid mode values. Please enter integers 0-3.")
 
     def on_text_overlay_toggle(self):
         """Переключение текстового оверлея"""
@@ -519,6 +560,63 @@ class TurtleBotGUI(QMainWindow):
             self.lane_text_pub.publish(String(data=""))
             self.top_text_pub.publish(String(data=""))
             rospy.loginfo("Text overlay disabled")
+
+    def on_lane_detection_toggle(self):
+        """Переключение детектирования линий разметки"""
+        self.lane_detection_enabled = self.lane_detection_toggle.isChecked()
+
+        if self.lane_detection_enabled:
+            # Включаем режим детектирования линий разметки (режим 2) для обеих камер
+            self.lane_mode = 2
+            self.top_mode = 2
+            self.lane_mode_pub.publish(2)
+            self.top_mode_pub.publish(2)
+            rospy.loginfo("Lane detection enabled (mode 2)")
+        else:
+            # Возвращаемся к режиму 0 (исходное изображение)
+            self.lane_mode = 0
+            self.top_mode = 0
+            self.lane_mode_pub.publish(0)
+            self.top_mode_pub.publish(0)
+            rospy.loginfo("Lane detection disabled (mode 0)")
+
+        # Обновляем текстовые поля
+        self.lane_mode_edit.setText(str(self.lane_mode))
+        self.top_mode_edit.setText(str(self.top_mode))
+
+    def on_perspective_toggle(self):
+        """Переключение коррекции перспективы"""
+        self.perspective_correction_enabled = self.perspective_toggle.isChecked()
+
+        if self.perspective_correction_enabled:
+            # Включаем режим коррекции перспективы (режим 3) для обеих камер
+            self.lane_mode = 3
+            self.top_mode = 3
+            self.lane_mode_pub.publish(3)
+            self.top_mode_pub.publish(3)
+            rospy.loginfo("Perspective correction enabled (mode 3)")
+        else:
+            # Возвращаемся к режиму 0 (исходное изображение)
+            self.lane_mode = 0
+            self.top_mode = 0
+            self.lane_mode_pub.publish(0)
+            self.top_mode_pub.publish(0)
+            rospy.loginfo("Perspective correction disabled (mode 0)")
+
+        # Обновляем текстовые поля
+        self.lane_mode_edit.setText(str(self.lane_mode))
+        self.top_mode_edit.setText(str(self.top_mode))
+
+    def on_perspective_angle_change(self, value):
+        """Обработка изменения угла наклона для коррекции перспективы"""
+        self.perspective_angle = value
+        self.perspective_angle_label.setText(f"Perspective Angle: {value}°")
+
+        # Публикуем угол наклона для обеих камер
+        self.lane_angle_pub.publish(Int32(data=value))
+        self.top_angle_pub.publish(Int32(data=value))
+
+        rospy.loginfo(f"Perspective angle set to {value}° and published to both cameras")
 
     def apply_text_overlay(self):
         """Применение текстового оверлея"""
