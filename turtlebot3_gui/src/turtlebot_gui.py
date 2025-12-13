@@ -82,12 +82,6 @@ class LidarWidget(QWidget):
                 for point in points:
                     painter.drawPoint(point)
 
-                # Соединяем точки линиями
-                painter.setPen(QPen(QColor(255, 100, 100), 1))
-                for i in range(len(points)):
-                    if i < len(points) - 1:
-                        painter.drawLine(points[i], points[i+1])
-
 class CameraWidget(QLabel):
     def __init__(self, camera_name="Camera", parent=None):
         super(CameraWidget, self).__init__(parent)
