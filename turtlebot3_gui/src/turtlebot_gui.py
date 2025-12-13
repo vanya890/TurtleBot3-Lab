@@ -3,7 +3,7 @@ import sys
 import rospy
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                             QHBoxLayout, QPushButton, QLabel, QGridLayout,
-                            QGroupBox, QSlider, QFormLayout, QLineEdit)
+                            QGroupBox, QSlider, QFormLayout, QLineEdit, QTabWidget)
 from PyQt5.QtCore import QTimer, Qt, pyqtSignal, QPointF
 from PyQt5.QtGui import (QFont, QKeyEvent, QPainter, QColor, QPen, QBrush, 
                          QPolygonF, QTransform, QImage, QPixmap)
@@ -95,8 +95,8 @@ class LidarWidget(QWidget):
 
                 for point in grouped_points:
                     # Рисуем небольшой прямоугольник вместо точки
-                    painter.drawRect(point.x() - rect_size/2,
-                                    point.y() - rect_size/2,
+                    painter.drawRect(int(point.x() - rect_size/2),
+                                    int(point.y() - rect_size/2),
                                     rect_size, rect_size)
 
 class CameraWidget(QLabel):
@@ -202,9 +202,17 @@ class TurtleBotGUI(QMainWindow):
         self.setWindowTitle('TurtleBot3 Control Panel')
         self.setGeometry(100, 100, 800, 600)
 
-        # Основной виджет и layout
+        # Создаем основной виджет с вкладками
         central_widget = QWidget()
         main_layout = QVBoxLayout()
+
+        # Создаем виджет с вкладками
+        self.tab_widget = QTabWidget()
+        self.tab_widget.setTabPosition(QTabWidget.North)  # Вкладки сверху
+
+        # ВКЛАДКА 1: Управление и данные
+        control_tab = QWidget()
+        control_tab_layout = QVBoxLayout()
 
         # Группа для отображения данных
         data_group = QGroupBox("Sensor Data")
@@ -331,6 +339,35 @@ class TurtleBotGUI(QMainWindow):
 
         speed_group.setLayout(speed_layout)
 
+        # Информационная группа
+        info_group = QGroupBox("Instructions")
+        info_layout = QVBoxLayout()
+
+        info_text = QLabel(
+            "Keyboard Controls:\n"
+            "W/↑ - Move Forward\n"
+            "S/↓ - Move Backward\n"
+            "A/← - Turn Left\n"
+            "D/→ - Turn Right\n"
+            "Space - Stop\n"
+            "\n"
+            "Use sliders for precise speed control"
+        )
+        info_text.setWordWrap(True)
+        info_layout.addWidget(info_text)
+        info_group.setLayout(info_layout)
+
+        # Добавляем группы на вкладку управления
+        control_tab_layout.addWidget(data_group)
+        control_tab_layout.addWidget(control_group)
+        control_tab_layout.addWidget(speed_group)
+        control_tab_layout.addWidget(info_group)
+        control_tab.setLayout(control_tab_layout)
+
+        # ВКЛАДКА 2: Сенсоры и визуализация
+        sensors_tab = QWidget()
+        sensors_tab_layout = QVBoxLayout()
+
         # Группа для визуализации лидара
         lidar_group = QGroupBox("LIDAR Visualization")
         lidar_layout = QVBoxLayout()
@@ -351,32 +388,17 @@ class TurtleBotGUI(QMainWindow):
         cameras_layout.addWidget(self.top_camera_widget)
         cameras_group.setLayout(cameras_layout)
 
-        # Информационная группа
-        info_group = QGroupBox("Instructions")
-        info_layout = QVBoxLayout()
+        # Добавляем группы на вкладку сенсоров
+        sensors_tab_layout.addWidget(lidar_group)
+        sensors_tab_layout.addWidget(cameras_group)
+        sensors_tab.setLayout(sensors_tab_layout)
 
-        info_text = QLabel(
-            "Keyboard Controls:\n"
-            "W/↑ - Move Forward\n"
-            "S/↓ - Move Backward\n"
-            "A/← - Turn Left\n"
-            "D/→ - Turn Right\n"
-            "Space - Stop\n"
-            "\n"
-            "Use sliders for precise speed control"
-        )
-        info_text.setWordWrap(True)
-        info_layout.addWidget(info_text)
-        info_group.setLayout(info_layout)
+        # Добавляем вкладки в основной виджет вкладок
+        self.tab_widget.addTab(control_tab, "Control Panel")
+        self.tab_widget.addTab(sensors_tab, "Sensors & Visualization")
 
-        # Добавляем группы в основной layout
-        main_layout.addWidget(data_group)
-        main_layout.addWidget(control_group)
-        main_layout.addWidget(speed_group)
-        main_layout.addWidget(lidar_group)
-        main_layout.addWidget(cameras_group)
-        main_layout.addWidget(info_group)
-
+        # Добавляем виджет вкладок в основной layout
+        main_layout.addWidget(self.tab_widget)
         central_widget.setLayout(main_layout)
         self.setCentralWidget(central_widget)
 
