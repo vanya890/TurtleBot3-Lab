@@ -1,0 +1,7 @@
+string name
+float32 x_center_image
+float32 y_center_image
+float32 width_image
+float32 height_image
+float32 distance
+float32 angle

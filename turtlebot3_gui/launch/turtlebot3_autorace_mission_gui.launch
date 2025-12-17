@@ -1,0 +1,82 @@
+<launch>
+  <!-- ======================= АРГУМЕНТЫ И КОНФИГУРАЦИЯ ======================= -->
+  <arg name="model" default="waffle_pi" doc="model type [burger, waffle, waffle_pi]"/>
+  <!-- Точные стартовые координаты для миссии Autorace 2020 -->
+  <arg name="x_pos" default="0.25"/>
+  <arg name="y_pos" default="-1.75"/>
+  <arg name="z_pos" default="0.0"/>
+  <arg name="yaw"   default="0.0"/>
+
+  <!-- ======================= 1. ЗАПУСК СИМУЛЯЦИИ GAZEBO ======================= -->
+  <!-- Запускаем мир Autorace 2020 -->
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="world_name" value="$(find turtlebot3_gazebo)/worlds/turtlebot3_autorace_2020.world"/>
+    <arg name="paused" value="false"/>
+    <arg name="use_sim_time" value="true"/>
+    <arg name="gui" value="true"/>
+    <arg name="headless" value="false"/>
+    <arg name="debug" value="false"/>
+  </include>
+
+  <!-- Спавним вашу кастомную модель робота с двумя камерами в правильной позиции -->
+  <param name="robot_description" command="$(find xacro)/xacro --inorder $(find turtlebot3_gui)/urdf/turtlebot3_waffle_pi_dual_cam.urdf.xacro" />
+  <node pkg="gazebo_ros" type="spawn_model" name="spawn_urdf" args="-urdf -model turtlebot3_$(arg model) -x $(arg x_pos) -y $(arg y_pos) -z $(arg z_pos) -Y $(arg yaw) -param robot_description" />
+
+  <!-- ======================= 2. ЗАПУСК УЗЛОВ AUTORACE ======================= -->
+
+  <!-- 2.2 Узлы детекции объектов для ВЕРХНЕЙ камеры -->
+  <!-- Все узлы берут сырое изображение с /top_camera/image_raw и публикуют результат в /detect/image_processed -->
+
+  <!-- Детектор светофора -->
+  <node pkg="turtlebot3_autorace_detect" type="detect_traffic_light" name="detect_traffic_light" output="screen">
+    <remap from="/detect/image_input" to="/top_camera/image_raw" />
+    <remap from="/detect/image_output" to="/detect/image_processed" />
+    <remap from="/detect/image_output/compressed" to="/detect/image_processed/compressed" />
+  </node>
+
+  <!-- Детектор знака "Парковка" -->
+  <node pkg="turtlebot3_autorace_detect" type="detect_parking_sign" name="detect_parking_sign" output="screen">
+    <remap from="/detect/image_input" to="/top_camera/image_raw" />
+    <remap from="/detect/image_output" to="/detect/image_processed" />
+    <remap from="/detect/image_output/compressed" to="/detect/image_processed/compressed" />
+  </node>
+
+  <!-- Детектор знаков "Стоп" и "Перекресток" -->
+  <node pkg="turtlebot3_autorace_detect" type="detect_intersection_sign" name="detect_intersection_and_stop_sign" output="screen">
+    <remap from="/detect/image_input" to="/top_camera/image_raw" />
+    <remap from="/detect/image_output" to="/detect/image_processed" />
+    <remap from="/detect/image_output/compressed" to="/detect/image_processed/compressed" />
+  </node>
+
+  <!-- Детектор знака "Тоннель" -->
+  <node pkg="turtlebot3_autorace_detect" type="detect_tunnel_sign" name="detect_tunnel_sign" output="screen">
+    <remap from="/detect/image_input" to="/top_camera/image_raw" />
+    <remap from="/detect/image_output" to="/detect/image_processed" />
+    <remap from="/detect/image_output/compressed" to="/detect/image_processed/compressed" />
+  </node>
+
+  <!-- ======================= 3. ЗАПУСК ОБРАБОТЧИКОВ КАМЕР ДЛЯ GUI ======================= -->
+  <!-- 3.1 Обработчик для ФРОНТАЛЬНОЙ камеры (lane_camera): подписывается на свой сырой поток -->
+  <node pkg="turtlebot3_gui" type="camera_processor.py" name="lane_camera_processor" output="screen">
+    <param name="camera_name" value="lane_camera" />
+    <remap from="/lane_camera/image_raw" to="/lane_camera/image_raw" />
+  </node>
+
+  <!-- 3.2 Обработчик для ВЕРХНЕЙ камеры (top_camera): подписывается на свой сырой поток -->
+  <node pkg="turtlebot3_gui" type="camera_processor.py" name="top_camera_processor" output="screen">
+    <param name="camera_name" value="top_camera" />
+    <remap from="/top_camera/image_raw" to="/top_camera/image_raw" />
+  </node>
+
+  <!-- ======================= 4. ЗАПУСК ГРАФИЧЕСКОГО ИНТЕРФЕЙСА ======================= -->
+  
+  <!-- 4.1 Узел для оценки положения объектов и публикации структурированных данных -->
+  <node pkg="turtlebot3_gui" type="object_position_estimator.py" name="object_position_estimator" output="screen" />
+
+  <!-- 4.2 GUI подписывается на обработанные потоки от ваших camera_processor.py -->
+  <node pkg="turtlebot3_gui" type="turtlebot_gui.py" name="turtlebot_gui" output="screen" />
+
+  <!-- ======================= 5. ЗАПУСК УПРАВЛЕНИЯ МИССИЕЙ ======================= -->
+  <!-- Этот узел отвечает за динамические объекты: светофоры, шлагбаумы -->
+  <node pkg="turtlebot3_autorace_core" type="core_node_mission" name="core_node_mission" output="screen" />
+</launch>

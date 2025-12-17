@@ -10,7 +10,8 @@ d = generate_distutils_setup(
         'src/turtlebot_gui.py',
         'src/camera_processor.py',
         'src/dual_camera_processor.py',
-        'src/sensor_state_simulator.py'
+        'src/sensor_state_simulator.py',
+        'src/object_position_estimator.py'
     ],
 )
 
